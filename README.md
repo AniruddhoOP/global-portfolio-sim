@@ -5,6 +5,8 @@ between Nifty 50, S&P 500 and KOSPI, and see what the money would have become in
 rupees. It separates market return from currency return and suggests a
 lower-risk split. It is a historical backtest, not a predictor.
 
+**Live app: https://global-portfolio-sim-lslccdayqgcwhhj42vhmnr.streamlit.app/**
+
 ## Questions the app answers
 1. What would ₹X (lump sum or monthly SIP) have grown to in INR?
 2. Which market gave the best return per unit of risk?
