@@ -54,6 +54,26 @@ Delete `data/prices_inr_monthly.csv` or use the sidebar button to refresh.
   A walk-forward test re-optimises each January using only earlier data and
   compares against equal weight and Nifty, so the result is out of sample.
 
+## Key findings
+All in INR, default costs (0.2% per trade, fund fees 0.2/0.5/0.6%), price
+indices. Sharpe and currency figures use January 2010 to October 2026.
+
+- **Risk-adjusted return:** USA Sharpe 0.89 (best), Korea 0.36, India 0.28
+  (worst) at a 6.5% risk-free rate.
+- **Currency:** the rupee's fall added 4.43 points a year to the S&P 500's
+  17.47% INR return (about 25%), and 3.53 points to KOSPI's 12.03% (about 29%),
+  so the won helped too.
+- **2008:** a 34/33/33 mix fell 39.7% at its worst versus 47.3% for Nifty alone.
+- **March 2020:** the mix fell 19.9% versus 28.1% for Nifty alone.
+- **Lump sum vs SIP:** the same ₹20.2 lakh ended at ₹1.67 crore as a lump sum
+  and ₹73.2 lakh as a SIP, but that is mostly because the lump sum is invested
+  throughout. The rates are similar: 13.45% a year (lump sum) vs 13.95% XIRR (SIP).
+- **Auto-optimiser (walk-forward, 5-year lookback, from 2010):** min volatility
+  had 12.5% volatility and Sharpe 0.70 versus 14.5% and 0.59 for equal weight,
+  and 16.4% and 0.28 for Nifty alone. Max Sharpe cut volatility too but ended
+  with slightly less money than equal weight (₹8.68 vs ₹8.76 lakh). One period
+  only, so treat it as suggestive.
+
 ## Limitations
 Price indices exclude dividends (~1-2%/yr). Past returns do not predict future
 ones. Taxes and LRS/TCS are not modelled. The last month may be a partial month.
