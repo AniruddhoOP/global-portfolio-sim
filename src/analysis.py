@@ -1,9 +1,8 @@
 """Currency-vs-index split, minimum-variance suggestion and honesty check."""
-import numpy as np
 import pandas as pd
-from scipy.optimize import minimize
 
 from src.metrics import cagr
+from src.optimizer import bounds_for, optimise
 from src.simulator import MARKETS, simulate
 
 FX_COLUMN = {"USA": "USDINR", "Korea": "KRWINR"}
@@ -21,12 +20,9 @@ def currency_split(data):
 
 def suggest_split(data, years=5, max_w=0.7, min_india=0.2):
     """Lowest-risk split using the last `years` of monthly INR returns."""
-    rets = data[MARKETS].pct_change().dropna().tail(12 * years)
-    cov = rets.cov().values * 12
-    res = minimize(lambda w: w @ cov @ w, x0=np.ones(3) / 3,
-                   bounds=[(min_india, max_w), (0, max_w), (0, max_w)],
-                   constraints=[{"type": "eq", "fun": lambda w: w.sum() - 1}])
-    return pd.Series(res.x, index=MARKETS).round(2)
+    weights, _ = optimise(data, "Min volatility", years,
+                          bounds=bounds_for(0.0, max_w, min_india))
+    return weights.round(2)
 
 
 def honesty_check(data, start, end, years, amount, rebalance, cost, fees):

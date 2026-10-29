@@ -28,6 +28,7 @@ src/data.py       yfinance download, INR conversion, CSV cache
 src/metrics.py    CAGR, volatility, Sharpe, drawdown, best/worst year, XIRR
 src/simulator.py  lump sum / SIP / rebalancing / costs engine
 src/analysis.py   currency split, minimum-variance split, honesty check
+src/optimizer.py  auto-optimiser, efficient frontier, walk-forward test
 src/export.py     Excel export
 tests/            checks from the project guide
 data/             cached monthly prices (auto-created)
@@ -45,6 +46,11 @@ Delete `data/prices_inr_monthly.csv` or use the sidebar button to refresh.
 - **Currency split:** (1 + r_INR) = (1 + r_local)(1 + r_FX), shown as CAGR parts.
 - **Suggestion:** minimum-variance weights (SciPy) with max 70% per market and
   min 20% India, from the last N years of monthly INR returns.
+
+- **Auto-optimiser:** pick a goal (max Sharpe, min volatility or risk parity)
+  and bounds; SciPy SLSQP finds the split from the last N years of INR returns.
+  A walk-forward test re-optimises each January using only earlier data and
+  compares against equal weight and Nifty, so the result is out of sample.
 
 ## Limitations
 Price indices exclude dividends (~1-2%/yr). Past returns do not predict future

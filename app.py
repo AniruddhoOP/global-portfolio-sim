@@ -1,6 +1,7 @@
 """Streamlit front end: sidebar inputs -> simulation -> charts and tables."""
 from datetime import date
 
+import numpy as np
 import pandas as pd
 import plotly.express as px
 import streamlit as st
@@ -10,6 +11,9 @@ from src.data import load_data
 from src.export import to_excel
 from src.metrics import (ann_vol, best_worst_year, cagr, max_drawdown, sharpe,
                          xirr)
+from src.optimizer import (OBJECTIVES, bounds_for, efficient_frontier,
+                           history_stats, optimise, portfolio_stats,
+                           round_to_percent, summarise, walk_forward)
 from src.simulator import MARKETS, simulate
 
 COLORS = {"India": "#E8833A", "USA": "#2F6FDE", "Korea": "#2BA38B",
@@ -47,9 +51,8 @@ def read_inputs(first, last):
     end = sb.date_input("End", last, first, last)
 
     sb.subheader("Allocation (%)")
-    alloc = {"India": sb.slider("India", 0, 100, 34),
-             "USA": sb.slider("USA", 0, 100, 33),
-             "Korea": sb.slider("Korea", 0, 100, 33)}
+    alloc = {m: sb.slider(m, 0, 100, d, key=f"alloc_{m}")
+             for m, d in [("India", 34), ("USA", 33), ("Korea", 33)]}
 
     sb.subheader("Costs and rebalancing")
     rebalance = sb.selectbox("Rebalance", ["Never", "Yearly", "Quarterly"], index=1)
@@ -199,6 +202,83 @@ def render_suggestion(data, cfg):
             "minimum variance targets lower risk, not higher return.")
 
 
+def apply_split(pct):
+    """Button callback: move the sidebar sliders to the optimised split."""
+    for m in MARKETS:
+        st.session_state[f"alloc_{m}"] = int(pct[m])
+
+
+def render_optimiser(data, cfg):
+    st.caption("Searches for the split that best meets your goal using only "
+               "past data up to the end date. It is fitted to history, so "
+               "check the walk-forward test below before trusting it.")
+    c1, c2, c3 = st.columns(3)
+    objective = c1.selectbox("Goal", OBJECTIVES)
+    max_w = c2.slider("Max in any one market (%)", 40, 100, 70) / 100
+    min_india = c3.slider("Min in India (%)", 0, 60, 20) / 100
+    bounds = bounds_for(0.0, max_w, min_india)
+    hist = data.loc[:pd.Timestamp(cfg["end"])]
+
+    try:
+        weights, (ret, vol, shp) = optimise(hist, objective, cfg["lookback"],
+                                            cfg["rf"], bounds)
+    except RuntimeError as err:
+        st.warning(str(err))
+        return
+    pct = round_to_percent(weights)
+
+    cols = st.columns(6)
+    for col, mk in zip(cols[:3], MARKETS):
+        col.metric(mk, f"{pct[mk]}%")
+    cols[3].metric("Past return (ann.)", f"{ret:.1%}")
+    cols[4].metric("Past volatility", f"{vol:.1%}")
+    cols[5].metric("Past Sharpe", f"{shp:.2f}")
+    st.button("Apply to my allocation", on_click=apply_split, args=(pct,))
+
+    frontier = efficient_frontier(hist, cfg["lookback"], cfg["rf"], bounds)
+    fig = px.scatter(frontier, x="Volatility", y="Return", color="Sharpe",
+                     color_continuous_scale="Viridis", opacity=0.6,
+                     title=f"Possible splits, last {cfg['lookback']} years")
+    mu, cov = history_stats(hist, cfg["lookback"])
+    for name, w in [("Optimised", weights.values), ("Equal weight", np.ones(3) / 3)]:
+        r, v, _ = portfolio_stats(w, mu, cov, cfg["rf"])
+        fig.add_scatter(x=[v], y=[r], mode="markers+text", text=[name],
+                        textposition="top center", showlegend=False,
+                        marker=dict(size=14, color="#E8833A" if name == "Optimised" else "#8A8F98",
+                                    line=dict(width=2, color="white")))
+    fig.update_layout(xaxis_tickformat=".0%", yaxis_tickformat=".0%",
+                      margin=dict(t=40, b=0))
+    st.plotly_chart(fig, width="stretch")
+
+    st.subheader("Walk-forward test: did re-optimising each January pay off?")
+    growth, wlog = walk_forward(data.loc[:pd.Timestamp(cfg["end"])], cfg["start"],
+                                cfg["end"], objective, cfg["lookback"], cfg["rf"],
+                                cfg["amount"], cfg["cost"], bounds)
+    st.caption(f"Each year's weights use only the {cfg['lookback']} years before "
+               "it. Equal weights are used until that much history exists. "
+               "Lump sum, gross of fund fees.")
+    fig = px.line(growth, labels={"value": "₹", "date": "", "variable": ""},
+                  color_discrete_map={"Auto-optimised": "#7A3FD1",
+                                      "Equal weight": "#8A8F98",
+                                      "100% Nifty": "#E8833A"})
+    fig.update_layout(hovermode="x unified", legend_orientation="h",
+                      legend_y=1.1, margin=dict(t=30, b=0))
+    st.plotly_chart(fig, width="stretch")
+    summary = summarise(growth, cfg["rf"])
+    st.dataframe(summary.style.format("{:.2%}", subset=["CAGR", "Volatility",
+                                                        "Max drawdown"])
+                 .format("{:.2f}", subset=["Sharpe"])
+                 .format("₹{:,.0f}", subset=["Final value"]), width="stretch")
+    won = summary.loc["Auto-optimised", "Sharpe"] > summary.loc["Equal weight", "Sharpe"]
+    (st.success if won else st.warning)(
+        "Out of sample, the optimiser had a higher Sharpe than equal weight."
+        if won else "Out of sample, the optimiser did NOT beat equal weight on "
+        "Sharpe. Optimised weights are fitted to the past and often fail to "
+        "repeat; that is a valid result.")
+    with st.expander("Weights chosen each January"):
+        st.dataframe(wlog.style.format("{:.0%}"), width="stretch")
+
+
 def render_downloads(mine, table, prices, split, rets):
     sheets = {"Monthly results": mine, "Market comparison": table,
               "Currency split": split, "Correlation": rets.corr(),
@@ -234,8 +314,9 @@ def main():
     render_headline(mine, label, ret)
     render_growth(mine, nifty, equal)
 
-    tab1, tab2, tab3, tab4 = st.tabs(
-        ["Markets compared", "Currency effect", "Correlation", "Lower-risk split"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(
+        ["Markets compared", "Currency effect", "Correlation", "Lower-risk split",
+         "Auto-optimiser"])
     with tab1:
         render_markets(table, prices)
     with tab2:
@@ -244,6 +325,8 @@ def main():
         render_correlation(rets)
     with tab4:
         render_suggestion(data, cfg)
+    with tab5:
+        render_optimiser(data, cfg)
 
     st.divider()
     render_downloads(mine, table, prices, currency_split(prices), rets)
