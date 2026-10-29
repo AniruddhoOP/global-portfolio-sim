@@ -133,6 +133,9 @@ def render_growth(mine, nifty, equal):
                            "Equal 33/33/33": equal["value"]})
     fig = px.line(growth, color_discrete_map=COLORS,
                   labels={"value": "₹", "date": "", "variable": ""})
+    # Dotted benchmark keeps "Your mix" visible when the two nearly coincide.
+    fig.update_traces(line_dash="dot", selector=dict(name="Equal 33/33/33"))
+    fig.update_traces(line_width=3, selector=dict(name="Your mix"))
     fig.update_layout(hovermode="x unified", legend_orientation="h",
                       legend_y=1.1, margin=dict(t=30, b=0))
     st.plotly_chart(fig, width="stretch")
